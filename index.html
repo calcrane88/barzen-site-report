@@ -1108,11 +1108,32 @@ function closePreview() {
   document.getElementById('previewOverlay').classList.remove('show');
 }
 
+async function logToTradeControl() {
+  try {
+    const d = _previewData;
+    if (!d) return;
+    const jobCode = d.job ? d.job.split('—')[0].trim() : null;
+    await fetch('https://trade-control-ten.vercel.app/api/forms/site-submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        form_type: 'site_manager_report',
+        job_code: jobCode,
+        submitted_by: d.sm || null,
+        data: d,
+      }),
+    });
+  } catch(e) { console.warn('TradeControl log failed:', e); }
+}
+
 function sendViaEmail() {
   const to = 'cal@barzenprojects.com.au';
-  const cc = window._smEmail || '';
-  const ccPart = cc ? `&cc=${encodeURIComponent(cc)}` : '';
-  const mailto = `mailto:${to}?subject=${encodeURIComponent(_previewSubject)}${ccPart}&body=${encodeURIComponent(_previewBody)}`;
+  const ccAddresses = ['admin@barzenprojects.com.au'];
+  if (window._smEmail) ccAddresses.push(window._smEmail);
+  const ccEncoded = ccAddresses.map(e => encodeURIComponent(e.trim())).join(',');
+  const ccPart = `&cc=${ccEncoded}`;
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(_previewSubject)}${ccPart}&body=${encodeURIComponent(_previewBody)}`;
+  logToTradeControl();
   window.location.href = mailto;
 
   closePreview();
