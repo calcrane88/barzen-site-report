@@ -1108,39 +1108,59 @@ function closePreview() {
   document.getElementById('previewOverlay').classList.remove('show');
 }
 
-async function logToTradeControl() {
+async function sendViaEmail() {
   try {
     const d = _previewData;
     if (!d) return;
+
+    showToast('Sending report with PDF attached...');
+
     const jobCode = d.job ? d.job.split('—')[0].trim() : null;
-    await fetch('https://trade-control-ten.vercel.app/api/forms/site-submit', {
+    const ccAddresses = ['admin@barzenprojects.com.au'];
+    if (window._smEmail) ccAddresses.push(window._smEmail);
+
+    const payload = {
+      form_type: 'site_manager_report',
+      job_code: jobCode,
+      submitted_by: d.sm || null,
+      data: d,
+      email: {
+        to: 'cal@barzenprojects.com.au',
+        cc: ccAddresses.join(', '),
+        subject: _previewSubject,
+        body: _previewBody,
+        // No pdf_base64 — server generates PDF via pdfkit
+      }
+    };
+
+    const res = await fetch('https://trade-control-ten.vercel.app/api/forms/site-submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        form_type: 'site_manager_report',
-        job_code: jobCode,
-        submitted_by: d.sm || null,
-        data: d,
-      }),
+      body: JSON.stringify(payload),
     });
-  } catch(e) { console.warn('TradeControl log failed:', e); }
-}
 
-function sendViaEmail() {
-  const to = 'cal@barzenprojects.com.au';
-  const ccAddresses = ['admin@barzenprojects.com.au'];
-  if (window._smEmail) ccAddresses.push(window._smEmail);
-  const ccEncoded = ccAddresses.map(e => encodeURIComponent(e.trim())).join(',');
-  const ccPart = `&cc=${ccEncoded}`;
-  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(_previewSubject)}${ccPart}&body=${encodeURIComponent(_previewBody)}`;
-  logToTradeControl();
-  window.location.href = mailto;
+    closePreview();
 
-  closePreview();
-  setTimeout(() => {
-    document.getElementById('confirmRef').textContent = _previewData._ref;
-    document.getElementById('confirmScreen').classList.add('show');
-  }, 800);
+    if (res.ok) {
+      document.getElementById('confirmRef').textContent = _previewData._ref;
+      document.getElementById('confirmScreen').classList.add('show');
+    } else {
+      // Fallback: open mailto if API fails
+      console.error('API send failed — falling back to mailto');
+      const ccEncoded = ccAddresses.map(e => encodeURIComponent(e.trim())).join(',');
+      window.location.href = `mailto:${encodeURIComponent('cal@barzenprojects.com.au')}?subject=${encodeURIComponent(_previewSubject)}&cc=${ccEncoded}&body=${encodeURIComponent(_previewBody)}`;
+      showToast('API unavailable — email app opened. PDF will not be attached.');
+    }
+  } catch(e) {
+    console.error('sendViaEmail error:', e);
+    // Fallback on network error
+    const ccAddresses = ['admin@barzenprojects.com.au'];
+    if (window._smEmail) ccAddresses.push(window._smEmail);
+    const ccEncoded = ccAddresses.map(e => encodeURIComponent(e.trim())).join(',');
+    closePreview();
+    window.location.href = `mailto:${encodeURIComponent('cal@barzenprojects.com.au')}?subject=${encodeURIComponent(_previewSubject)}&cc=${ccEncoded}&body=${encodeURIComponent(_previewBody)}`;
+    showToast('Error — email app opened as fallback.');
+  }
 }
 
 function copyReport() {
